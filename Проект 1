@@ -1,0 +1,245 @@
+      1. Архитектура проекта
+
+image_processor_project1/
+│
+├── main.py               # Точка входа в приложение
+│
+├── core/                 # Модуль обработки и работы с изображениями
+│   ├── __init__.py
+│   ├── image_processor.py  # Основной класс для обработки изображений
+│   └── image_utils.py     # Вспомогательные утилиты
+│
+└── gui/                  # Модуль взаимодействия с пользователем
+    ├── __init__.py
+    ├── main_window.py     # Главное окно приложения
+    └── styles.py          # Стили для интерфейса
+
+
+      2. Реализация модулей
+      a. Модуль обработки и работы с изображениями(core/) 
+
+# core/image_utils.py
+import os
+from PIL import Image
+
+def validate_image_path(image_path):
+    """Проверка существования файла и его формата"""
+    if not os.path.exists(image_path):
+        raise FileNotFoundError(f"Файл не найден: {image_path}")
+    
+    valid_extensions = {'.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.webp'}
+    file_ext = os.path.splitext(image_path)[1].lower()
+    if file_ext not in valid_extensions:
+        raise ValueError(f"Неподдерживаемый формат файла: {file_ext}")
+    
+    return True
+
+def get_output_path(input_path, operation, format_override=None):
+    """Генерация пути для сохранения обработанного изображения"""
+    directory = os.path.dirname(input_path)
+    filename = os.path.basename(input_path)
+    name, ext = os.path.splitext(filename)
+    
+    if format_override:
+        ext = f".{format_override.lower()}"
+    
+    operation_suffix = {
+        'resize': 'resized',
+        'rotate': 'rotated'
+    }
+    
+    suffix = operation_suffix.get(operation, 'processed')
+    output_filename = f"{name}_{suffix}{ext}"
+    return os.path.join(directory, output_filename)
+
+
+      b. Модуль взаимодействия с пользователем(gui/)
+# gui/main_window.py
+from PyQt5.QtWidgets import (QMainWindow, QTabWidget, QVBoxLayout, 
+                             QWidget, QMessageBox, QFileDialog)
+from .project_widgets import (ResizeRotateWidget, FormatConvertWidget, 
+                             InfoRenameWidget, MergeWidget, GrayscaleWidget)
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Image Processing Application")
+        self.setGeometry(100, 100, 800, 600)
+        
+        self.init_ui()
+        
+    def init_ui(self):
+        # Создаем виджет с вкладками
+        self.tabs = QTabWidget()
+        
+        # Добавляем вкладки для каждого проекта
+        self.tabs.addTab(ResizeRotateWidget(), "Проект 1 - Изменение размера/поворот")
+        self.tabs.addTab(FormatConvertWidget(), "Проект 2 - Конвертация/перемещение")
+        self.tabs.addTab(InfoRenameWidget(), "Проект 3 - Информация/переименование")
+        self.tabs.addTab(MergeWidget(), "Проект 4 - Склеивание изображений")
+        self.tabs.addTab(GrayscaleWidget(), "Проект 5 - Ч/Б конвертация")
+        
+        self.setCentralWidget(self.tabs)
+    
+    def show_success_message(self, message):
+        QMessageBox.information(self, "Успех", message)
+    
+    def show_error_message(self, message):
+        QMessageBox.warning(self, "Ошибка", message)
+    
+    def get_save_filename(self, caption, default_filter):
+        return QFileDialog.getSaveFileName(self, caption, filter=default_filter)
+    
+    def get_existing_directory(self, caption):
+        return QFileDialog.getExistingDirectory(self, caption)
+
+
+      Пример реализации виджета
+# gui/project_widgets.py
+from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+                             QLineEdit, QPushButton, QSpinBox, QComboBox)
+from PyQt5.QtCore import Qt
+from core.image_processor import ImageProcessor
+import os
+
+class ResizeRotateWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.init_ui()
+        
+    def init_ui(self):
+        layout = QVBoxLayout()
+        
+        # Выбор файла
+        file_layout = QHBoxLayout()
+        file_layout.addWidget(QLabel("Путь к изображению:"))
+        self.file_path = QLineEdit()
+        file_layout.addWidget(self.file_path)
+        self.browse_btn = QPushButton("Обзор")
+        self.browse_btn.clicked.connect(self.browse_file)
+        file_layout.addWidget(self.browse_btn)
+        layout.addLayout(file_layout)
+        
+        # Изменение размера
+        layout.addWidget(QLabel("Изменение размера:"))
+        size_layout = QHBoxLayout()
+        size_layout.addWidget(QLabel("Ширина:"))
+        self.width_spin = QSpinBox()
+        self.width_spin.setRange(1, 10000)
+        self.width_spin.setValue(800)
+        size_layout.addWidget(self.width_spin)
+        
+        size_layout.addWidget(QLabel("Высота:"))
+        self.height_spin = QSpinBox()
+        self.height_spin.setRange(1, 10000)
+        self.height_spin.setValue(600)
+        size_layout.addWidget(self.height_spin)
+        
+        self.resize_btn = QPushButton("Изменить размер")
+        self.resize_btn.clicked.connect(self.resize_image)
+        size_layout.addWidget(self.resize_btn)
+        layout.addLayout(size_layout)
+        
+        # Поворот
+        layout.addWidget(QLabel("Поворот изображения:"))
+        rotate_layout = QHBoxLayout()
+        rotate_layout.addWidget(QLabel("Градусы:"))
+        self.rotate_combo = QComboBox()
+        self.rotate_combo.addItems(["90", "180", "270"])
+        rotate_layout.addWidget(self.rotate_combo)
+        
+        self.rotate_btn = QPushButton("Повернуть")
+        self.rotate_btn.clicked.connect(self.rotate_image)
+        rotate_layout.addWidget(self.rotate_btn)
+        layout.addLayout(rotate_layout)
+        
+        self.setLayout(layout)
+    
+    def browse_file(self):
+        filename, _ = QFileDialog.getOpenFileName(
+            self, "Выберите изображение", "", 
+            "Image Files (*.png *.jpg *.jpeg *.bmp)"
+        )
+        if filename:
+            self.file_path.setText(filename)
+    
+    def resize_image(self):
+        try:
+            input_path = self.file_path.text()
+            if not os.path.exists(input_path):
+                self.parent().parent().show_error_message("Файл не существует")
+                return
+            
+            new_size = (self.width_spin.value(), self.height_spin.value())
+            output_path = self.get_output_path("resized")
+            
+            ImageProcessor.resize_image(input_path, output_path, new_size)
+            self.parent().parent().show_success_message(
+                f"Изображение успешно изменено и сохранено как:\n{output_path}"
+            )
+            
+        except Exception as e:
+            self.parent().parent().show_error_message(f"Ошибка: {str(e)}")
+    
+    def rotate_image(self):
+        try:
+            input_path = self.file_path.text()
+            if not os.path.exists(input_path):
+                self.parent().parent().show_error_message("Файл не существует")
+                return
+            
+            degrees = int(self.rotate_combo.currentText())
+            output_path = self.get_output_path("rotated")
+            
+            ImageProcessor.rotate_image(input_path, output_path, degrees)
+            self.parent().parent().show_success_message(
+                f"Изображение успешно повернуто и сохранено как:\n{output_path}"
+            )
+            
+        except Exception as e:
+            self.parent().parent().show_error_message(f"Ошибка: {str(e)}")
+    
+    def get_output_path(self, prefix):
+        input_path = self.file_path.text()
+        directory = os.path.dirname(input_path)
+        filename = os.path.basename(input_path)
+        name, ext = os.path.splitext(filename)
+        return os.path.join(directory, f"{prefix}_{name}{ext}")
+
+
+      c. Точка входа в приложение
+
+# main.py
+import sys
+from PyQt5.QtWidgets import QApplication
+from gui.main_window import MainWindow
+
+def main():
+    app = QApplication(sys.argv)
+    
+    # Настройка стиля приложения
+    app.setStyle('Fusion')
+    
+    window = MainWindow()
+    window.show()
+    
+    sys.exit(app.exec_())
+
+if __name__ == '__main__':
+    main()
+
+
+      3. Файл зависимостей
+
+# requirements.txt
+Pillow>=9.0.0
+PyQt5>=5.15.0
+
+
+      4. Установка и запуск
+
+# Установка зависимостей
+pip install -r requirements.txt
+
+# Запуск приложения
+python main.py
